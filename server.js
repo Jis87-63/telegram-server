@@ -1,46 +1,133 @@
-import express from "express";
-import dotenv from "dotenv";
-import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions/index.js";
-import input from "input";
+import express from "express"
+import cors from "cors"
+import dotenv from "dotenv"
+import { TelegramClient } from "telegram"
+import { StringSession } from "telegram/sessions/index.js"
 
-dotenv.config();
+dotenv.config()
 
-const apiId = Number(process.env.API_ID);
-const apiHash = process.env.API_HASH;
+const app = express()
+app.use(express.json())
+app.use(cors())
 
-const stringSession = new StringSession("");
+const apiId = Number(process.env.API_ID)
+const apiHash = process.env.API_HASH
+const port = process.env.PORT || 3000
 
-const client = new TelegramClient(stringSession, apiId, apiHash, {
-  connectionRetries: 5,
-});
-
-const app = express();
+let client = null
+let stringSession = new StringSession("")
 
 app.get("/", (req, res) => {
   res.json({
     status: "Telegram server running"
-  });
-});
+  })
+})
 
-app.get("/connect", async (req, res) => {
+app.post("/login/start", async (req, res) => {
 
-  await client.start({
-    phoneNumber: async () => await input.text("Phone number: "),
-    password: async () => await input.text("Password: "),
-    phoneCode: async () => await input.text("Code: "),
-    onError: (err) => console.log(err),
-  });
+  const { phone } = req.body
 
-  console.log("Session:", client.session.save());
+  try {
+
+    client = new TelegramClient(stringSession, apiId, apiHash, {
+      connectionRetries: 5
+    })
+
+    await client.connect()
+
+    const result = await client.sendCode({
+      apiId,
+      apiHash
+    }, phone)
+
+    res.json({
+      status: "CODE_SENT",
+      phoneCodeHash: result.phoneCodeHash
+    })
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    })
+
+  }
+
+})
+
+app.post("/login/verify", async (req, res) => {
+
+  const { phone, code, phoneCodeHash } = req.body
+
+  try {
+
+    await client.signIn({
+      phoneNumber: phone,
+      phoneCodeHash,
+      phoneCode: code
+    })
+
+    const session = client.session.save()
+
+    res.json({
+      status: "CONNECTED",
+      session
+    })
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    })
+
+  }
+
+})
+
+app.post("/message/send", async (req, res) => {
+
+  const { username, message } = req.body
+
+  try {
+
+    await client.sendMessage(username, {
+      message
+    })
+
+    res.json({
+      status: "MESSAGE_SENT"
+    })
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    })
+
+  }
+
+})
+
+app.get("/session/status", async (req, res) => {
+
+  if (!client) {
+
+    return res.json({
+      status: "DISCONNECTED"
+    })
+
+  }
+
+  const connected = await client.isConnected()
 
   res.json({
-    status: "Telegram connected"
-  });
-});
+    status: connected ? "CONNECTED" : "DISCONNECTED"
+  })
 
-const PORT = process.env.PORT || 3000;
+})
 
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
+app.listen(port, () => {
+
+  console.log("Server running on port " + port)
+
+})
