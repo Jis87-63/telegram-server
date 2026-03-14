@@ -1,5 +1,6 @@
 import express from "express"
 import dotenv from "dotenv"
+import cors from "cors"
 
 import { createClient } from "./src/telegram/telegramClient.js"
 import { saveSession, getSession } from "./src/sessionManager/sessionManager.js"
@@ -9,7 +10,15 @@ dotenv.config()
 
 const app = express()
 
+// permitir JSON
 app.use(express.json())
+
+// permitir acesso de qualquer frontend
+app.use(cors({
+  origin: "*",
+  methods: ["GET","POST"],
+  allowedHeaders: ["Content-Type"]
+}))
 
 const API_ID = process.env.API_ID
 const API_HASH = process.env.API_HASH
